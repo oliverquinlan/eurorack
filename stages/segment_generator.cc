@@ -8,10 +8,10 @@
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -19,7 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-// 
+//
 // See http://creativecommons.org/licenses/MIT/ for more information.
 //
 // -----------------------------------------------------------------------------
@@ -50,7 +50,7 @@ const int kRetrigDelaySamples = 32;
 
 void SegmentGenerator::Init() {
   process_fn_ = &SegmentGenerator::ProcessMultiSegment;
-  
+
   phase_ = 0.0f;
 
   zero_ = 0.0f;
@@ -60,7 +60,7 @@ void SegmentGenerator::Init() {
   start_ = 0.0f;
   value_ = 0.0f;
   lp_ = 0.0f;
-  
+
   monitored_segment_ = 0;
   active_segment_ = 0;
   retrig_delay_ = 0;
@@ -77,18 +77,18 @@ void SegmentGenerator::Init() {
   s.if_falling = 0;
   s.if_complete = 0;
   fill(&segments_[0], &segments_[kMaxNumSegments + 1], s);
-  
+
   Parameters p;
   p.primary = 0.0f;
   p.secondary = 0.0f;
   fill(&parameters_[0], &parameters_[kMaxNumSegments], p);
-  
+
   ramp_extractor_.Init(
       kSampleRate,
       1000.0f / kSampleRate);
   ramp_division_quantizer_.Init();
   delay_line_.Init();
-  
+
   num_segments_ = 0;
 }
 
@@ -123,14 +123,14 @@ void SegmentGenerator::ProcessMultiSegment(
   float start = start_;
   float lp = lp_;
   float value = value_;
-  
+
   while (size--) {
     const Segment& segment = segments_[active_segment_];
 
     if (segment.time) {
       phase += RateToFrequency(*segment.time);
     }
-    
+
     bool complete = phase >= 1.0f;
     if (complete) {
       phase = 1.0f;
@@ -139,9 +139,9 @@ void SegmentGenerator::ProcessMultiSegment(
         start,
         *segment.end,
         WarpPhase(segment.phase ? *segment.phase : phase, *segment.curve));
-  
+
     ONE_POLE(lp, value, PortamentoRateToLPCoefficient(*segment.portamento));
-  
+
     // Decide what to do next.
     int go_to_segment = -1;
     if (*gate_flags & GATE_FLAG_RISING) {
@@ -151,7 +151,7 @@ void SegmentGenerator::ProcessMultiSegment(
     } else if (complete) {
       go_to_segment = segment.if_complete;
     }
-  
+
     if (go_to_segment != -1) {
       phase = 0.0f;
       const Segment& destination = segments_[go_to_segment];
@@ -160,7 +160,7 @@ void SegmentGenerator::ProcessMultiSegment(
           : (go_to_segment == active_segment_ ? start : value);
       active_segment_ = go_to_segment;
     }
-    
+
     out->value = lp;
     out->phase = phase;
     out->segment = active_segment_;
@@ -181,7 +181,7 @@ void SegmentGenerator::ProcessDecayEnvelope(
       phase_ = 0.0f;
       active_segment_ = 0;
     }
-  
+
     phase_ += frequency;
     if (phase_ >= 1.0f) {
       phase_ = 1.0f;
@@ -199,7 +199,7 @@ void SegmentGenerator::ProcessDecayEnvelope(
 void SegmentGenerator::ProcessTimedPulseGenerator(
     const GateFlags* gate_flags, SegmentGenerator::Output* out, size_t size) {
   const float frequency = RateToFrequency(parameters_[0].secondary);
-  
+
   ParameterInterpolator primary(&primary_, parameters_[0].primary, size);
   while (size--) {
     if (*gate_flags & GATE_FLAG_RISING) {
@@ -215,7 +215,7 @@ void SegmentGenerator::ProcessTimedPulseGenerator(
       phase_ = 1.0f;
       active_segment_ = 1;
     }
-  
+
     const float p = primary.Next();
     lp_ = value_ = active_segment_ == 0 && !retrig_delay_ ? p : 0.0f;
     out->value = lp_;
@@ -310,7 +310,8 @@ void SegmentGenerator::ProcessTapLFO(
 
 void SegmentGenerator::ProcessFreeRunningLFO(
     const GateFlags* gate_flags, SegmentGenerator::Output* out, size_t size) {
-  float f = 96.0f * (parameters_[0].primary - 0.5f);
+//Changed float from 96.0 to 120.0 to increase range of slider. Slider now covers a wider range of frequencies. - Oliver Quinlan
+  float f = 120.0f * (parameters_[0].primary - 0.5f);
   CONSTRAIN(f, -128.0f, 127.0f);
   const float frequency = SemitonesToRatio(f) * 2.0439497f / kSampleRate;
 
@@ -329,18 +330,18 @@ void SegmentGenerator::ProcessFreeRunningLFO(
 void SegmentGenerator::ProcessDelay(
     const GateFlags* gate_flags, SegmentGenerator::Output* out, size_t size) {
   const float max_delay = static_cast<float>(kMaxDelay - 1);
-  
+
   float delay_time = SemitonesToRatio(
       2.0f * (parameters_[0].secondary - 0.5f) * 36.0f) * 0.5f * kSampleRate;
   float clock_frequency = 1.0f;
   float delay_frequency = 1.0f / delay_time;
-  
+
   if (delay_time >= max_delay) {
     clock_frequency = max_delay * delay_frequency;
     delay_time = max_delay;
   }
   ParameterInterpolator primary(&primary_, parameters_[0].primary, size);
-  
+
   active_segment_ = 0;
   while (size--) {
     phase_ += clock_frequency;
@@ -349,13 +350,13 @@ void SegmentGenerator::ProcessDelay(
       phase_ -= 1.0f;
       delay_line_.Write(lp_);
     }
-    
+
     aux_ += delay_frequency;
     if (aux_ >= 1.0f) {
       aux_ -= 1.0f;
     }
     active_segment_ = aux_ < 0.5f ? 0 : 1;
-    
+
     ONE_POLE(
         value_,
         delay_line_.Read(delay_time - phase_),
@@ -372,7 +373,7 @@ void SegmentGenerator::ProcessPortamento(
   const float coefficient = PortamentoRateToLPCoefficient(
       parameters_[0].secondary);
   ParameterInterpolator primary(&primary_, parameters_[0].primary, size);
-  
+
   active_segment_ = 0;
   while (size--) {
     value_ = primary.Next();
@@ -386,7 +387,7 @@ void SegmentGenerator::ProcessPortamento(
 
 void SegmentGenerator::ProcessZero(
     const GateFlags* gate_flags, SegmentGenerator::Output* out, size_t size) {
-  
+
   value_ = 0.0f;
   active_segment_ = 1;
   while (size--) {
@@ -413,18 +414,18 @@ void SegmentGenerator::ShapeLFO(
     size_t size) {
   shape -= 0.5f;
   shape = 2.0f + 9.999999f * shape / (1.0f + 3.0f * fabs(shape));
-  
+
   const float slope = min(shape * 0.5f, 0.5f);
   const float plateau_width = max(shape - 3.0f, 0.0f);
   const float sine_amount = max(
       shape < 2.0f ? shape - 1.0f : 3.0f - shape, 0.0f);
-  
+
   const float slope_up = 1.0f / slope;
   const float slope_down = 1.0f / (1.0f - slope);
   const float plateau = 0.5f * (1.0f - plateau_width);
   const float normalization = 1.0f / plateau;
   const float phase_shift = plateau_width * 0.25f;
-  
+
   while (size--) {
     float phase = in_out->phase - phase_shift;
     if (phase < 0.0f) {
@@ -452,18 +453,18 @@ void SegmentGenerator::Configure(
     return;
   }
   num_segments_ = num_segments;
-  
+
   // assert(has_trigger);
-  
+
   process_fn_ = &SegmentGenerator::ProcessMultiSegment;
-  
+
   // A first pass to collect loop points, and check for STEP segments.
   int loop_start = -1;
   int loop_end = -1;
   bool has_step_segments = false;
   int last_segment = num_segments - 1;
   int first_ramp_segment = -1;
-  
+
   for (int i = 0; i <= last_segment; ++i) {
     has_step_segments = has_step_segments || \
         segment_configuration[i].type == TYPE_STEP;
@@ -479,7 +480,7 @@ void SegmentGenerator::Configure(
       }
     }
   }
-  
+
   // Check if there are step segments inside the loop.
   bool has_step_segments_inside_loop = false;
   if (loop_start != -1) {
@@ -490,7 +491,7 @@ void SegmentGenerator::Configure(
       }
     }
   }
-  
+
   for (int i = 0; i <= last_segment; ++i) {
     Segment* s = &segments_[i];
     if (segment_configuration[i].type == TYPE_RAMP) {
@@ -499,7 +500,7 @@ void SegmentGenerator::Configure(
       s->curve = &parameters_[i].secondary;
       s->portamento = &zero_;
       s->phase = NULL;
-      
+
       if (i == last_segment) {
         s->end = &zero_;
       } else if (segment_configuration[i + 1].type != TYPE_RAMP) {
@@ -544,14 +545,14 @@ void SegmentGenerator::Configure(
     s->if_complete = i == loop_end ? loop_start : i + 1;
     s->if_falling = loop_end == -1 || loop_end == last_segment || has_step_segments ? -1 : loop_end + 1;
     s->if_rising = 0;
-    
+
     if (has_step_segments) {
       if (!has_step_segments_inside_loop && i >= loop_start && i <= loop_end) {
         s->if_rising = (loop_end + 1) % num_segments;
       } else {
         // Just go to the next stage.
         // s->if_rising = (i == loop_end) ? loop_start : (i + 1) % num_segments;
-        
+
         // Find the next STEP segment.
         bool follow_loop = loop_end != -1;
         int next_step = i;
@@ -572,7 +573,7 @@ void SegmentGenerator::Configure(
       }
     }
   }
-  
+
   Segment* sentinel = &segments_[num_segments];
   sentinel->end = sentinel->start = segments_[num_segments - 1].end;
   sentinel->time = &zero_;
@@ -581,7 +582,7 @@ void SegmentGenerator::Configure(
   sentinel->if_rising = 0;
   sentinel->if_falling = -1;
   sentinel->if_complete = loop_end == last_segment ? 0 : -1;
-  
+
   // After changing the state of the module, we go to the sentinel.
   active_segment_ = num_segments;
 }
@@ -593,13 +594,13 @@ SegmentGenerator::ProcessFn SegmentGenerator::process_fn_table_[12] = {
   &SegmentGenerator::ProcessFreeRunningLFO,
   &SegmentGenerator::ProcessDecayEnvelope,
   &SegmentGenerator::ProcessTapLFO,
-  
+
   // STEP
   &SegmentGenerator::ProcessPortamento,
   &SegmentGenerator::ProcessPortamento,
   &SegmentGenerator::ProcessSampleAndHold,
   &SegmentGenerator::ProcessSampleAndHold,
-  
+
   // HOLD
   &SegmentGenerator::ProcessDelay,
   &SegmentGenerator::ProcessDelay,
